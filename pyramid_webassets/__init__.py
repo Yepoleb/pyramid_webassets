@@ -235,12 +235,14 @@ def get_webassets_env_from_settings(settings, prefix='webassets'):
     if 'base_url' not in kwargs:
         raise Exception("You need to provide webassets.base_url in your configuration")
 
+    resolver = AssetResolver(None)
+
     asset_dir = kwargs.pop('base_dir')
     asset_url = kwargs.pop('base_url')
 
     if ':' in asset_dir:
         try:
-            resolved_dir = AssetResolver(None).resolve(asset_dir).abspath()
+            resolved_dir = resolver.resolve(asset_dir).abspath()
         except ImportError:
             pass
         else:
@@ -273,7 +275,14 @@ def get_webassets_env_from_settings(settings, prefix='webassets'):
         kwargs['JST_NAMESPACE'] = kwargs.pop('jst_namespace')
 
     if 'manifest' in kwargs:
-        kwargs['manifest'] = maybebool(kwargs['manifest'])
+        manifest = maybebool(kwargs['manifest'])
+        if isinstance(manifest, six.string_types) and \
+                (manifest.startswith('file:') or manifest.startswith('json:')):
+            manifest_pre, manifest_path = manifest.split(':', 1)
+            path_resolved = resolver.resolve(manifest_path).abspath()
+            kwargs['manifest'] = '{}:{}'.format(manifest_pre, path_resolved)
+        else:
+            kwargs['manifest'] = manifest
 
     if 'url_expire' in kwargs:
         kwargs['url_expire'] = maybebool(kwargs['url_expire'])
@@ -290,8 +299,14 @@ def get_webassets_env_from_settings(settings, prefix='webassets'):
 
     if 'load_path' in kwargs:
         # force load_path to be an array and split on whitespace
-        if not isinstance(kwargs['load_path'], list):
-            kwargs['load_path'] = kwargs['load_path'].split()
+        load_path = kwargs['load_path']
+        if not isinstance(load_path, list):
+            load_path = load_path.split()
+
+        kwargs['load_path'] = []
+        for path in load_path:
+            path_resolved = resolver.resolve(path).abspath()
+            kwargs['load_path'].append(path_resolved)
 
     paths = kwargs.pop('paths', None)
 
